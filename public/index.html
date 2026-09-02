@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Prime Connect - نظام الموظفين</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Cairo:wght@300;400;600;700&display=swap');
+  :root {
+    --black: #141110; --gold: #b8873b; --gold-light: #d9b876; --ivory: #f6f1e7;
+    --bronze: #6b4f2a; --success: #4c7a5d; --alert: #a6472f; --text-dark: #221e1b; --line: #e6ddc9;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background: var(--ivory); font-family:'Cairo','Segoe UI',Tahoma,sans-serif; direction:rtl; color:var(--text-dark); }
+  #app { max-width:480px; margin:0 auto; min-height:100vh; position:relative; padding-bottom:80px; }
+
+  #loginScreen { min-height:100vh; display:flex; align-items:center; justify-content:center; background:var(--black); padding:20px; }
+  .login-card { background:var(--ivory); border-radius:14px; padding:30px 24px; width:100%; max-width:340px; border-top:4px solid var(--gold); }
+  .login-card .brand { font-family:'Amiri',serif; font-size:26px; color:var(--bronze); text-align:center; font-weight:700; }
+  .login-card .sub { text-align:center; font-size:12.5px; color:#8a7f6f; margin-bottom:22px; }
+  .login-card .field { margin-bottom:12px; }
+  .login-card label { display:block; font-size:12px; color:#6b6156; margin-bottom:4px; }
+  .login-card input { width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:8px; font-family:inherit; font-size:14px; background:#fff; }
+  .login-card button { width:100%; background:var(--black); color:var(--gold-light); border:none; border-radius:8px; padding:12px; font-weight:700; font-family:inherit; font-size:14px; margin-top:6px; }
+  .login-error { color:var(--alert); font-size:12.5px; margin-top:8px; text-align:center; min-height:16px; }
+
+  .header { background: var(--black); color: var(--ivory); padding: 18px 18px 14px; border-bottom: 3px solid var(--gold); display:flex; justify-content:space-between; align-items:flex-start; }
+  .header .brand { font-family: 'Amiri', serif; font-weight: 700; font-size: 22px; color: var(--gold-light); }
+  .header .sub { font-size: 12px; color: #cbbfa0; margin-top: 2px; }
+  .header .tab-title { margin-top: 12px; font-size: 17px; font-weight: 600; }
+  .header .who { font-size:11.5px; color:#cbbfa0; text-align:left; }
+  .header .logout { background:none; border:1px solid #4a423a; color:#cbbfa0; border-radius:6px; padding:4px 10px; font-size:11px; margin-top:6px; font-family:inherit; }
+
+  .content { padding: 14px 14px 8px; }
+  .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+  .stat-card { background: var(--black); color: var(--ivory); border-radius: 10px; padding: 14px; border-left: 3px solid var(--gold); }
+  .stat-card .num { font-family: 'Amiri', serif; font-size: 24px; color: var(--gold-light); font-weight: 700; }
+  .stat-card .label { font-size: 12px; color: #cbbfa0; margin-top: 2px; }
+
+  .search-box { background: var(--black); border-radius: 12px; padding: 14px; margin-bottom: 18px; }
+  .search-box .lbl { color: var(--gold-light); font-size: 13.5px; font-weight: 600; margin-bottom: 8px; }
+  .search-box select { width: 100%; padding: 10px; border-radius: 8px; border: none; font-family: inherit; font-size: 13.5px; margin-bottom: 8px; }
+  .search-box button { width: 100%; background: var(--gold); color: var(--black); border: none; border-radius: 8px; padding: 10px; font-weight: 700; font-family: inherit; font-size: 13.5px; }
+
+  .section-title { font-weight: 600; font-size: 15px; margin: 18px 0 8px; color: var(--bronze); }
+  .filter-chip { display: inline-flex; align-items: center; gap: 6px; background: var(--gold); color: var(--black); border-radius: 20px; padding: 6px 12px; font-size: 12.5px; font-weight: 600; margin-bottom: 12px; }
+  .filter-chip button { background: none; border: none; color: var(--black); font-weight: 700; font-size: 13px; cursor: pointer; }
+
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; }
+  .card .row1 { display: flex; justify-content: space-between; align-items: flex-start; }
+  .card .name { font-weight: 700; font-size: 15px; }
+  .card .meta { font-size: 12.5px; color: #6b6156; margin-top: 3px; line-height: 1.6; }
+  .badge { font-size: 11px; padding: 3px 9px; border-radius: 20px; font-weight: 600; white-space: nowrap; }
+  .badge.lead { background: #eee0c0; color: var(--bronze); }
+  .badge.negotiating { background: #fbe3cf; color: #8a4a1e; }
+  .badge.contract { background: #d9e6de; color: var(--success); }
+  .badge.active { background: var(--gold); color: var(--black); }
+  .badge.new { background: #eee0c0; color: var(--bronze); }
+  .badge.interview { background: #fbe3cf; color: #8a4a1e; }
+  .badge.submitted { background: #dbe3ee; color: #2f4a6b; }
+  .badge.hired { background: #d9e6de; color: var(--success); }
+  .badge.rejected { background: #f0d9d3; color: var(--alert); }
+  .badge.pending { background: #eee0c0; color: var(--bronze); }
+  .badge.confirmed { background: #dbe3ee; color: #2f4a6b; }
+  .badge.paid { background: #d9e6de; color: var(--success); }
+  .badge.owner { background: var(--gold); color:var(--black); }
+  .badge.staff { background:#dbe3ee; color:#2f4a6b; }
+
+  .pos-card { background: var(--black); border-radius: 10px; padding: 13px 15px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+  .pos-card .ptitle { color: var(--gold-light); font-weight: 700; font-size: 15px; }
+  .pos-card .pcat { color: #cbbfa0; font-size: 12px; margin-top: 2px; }
+  .pos-card .pcount { background: var(--gold); color: var(--black); border-radius: 20px; padding: 5px 12px; font-weight: 700; font-size: 13px; }
+
+  .card-actions { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .mini-btn { font-size: 12px; background: none; border: 1px solid var(--line); border-radius: 7px; padding: 4px 10px; color: var(--bronze); }
+  .mini-btn.danger { color: var(--alert); border-color: #ecd2ca; }
+
+  .empty { text-align: center; padding: 30px 10px; color: #9a8f7f; font-size: 13.5px; }
+
+  .fab { position: fixed; bottom: 88px; left: auto; right: 18px; width: 48px; height: 48px; border-radius: 50%; background: var(--gold); color: var(--black); font-size: 24px; border: none; box-shadow: 0 3px 10px rgba(0,0,0,0.25); }
+
+  .form-card { background: #fff; border: 1px solid var(--gold); border-radius: 10px; padding: 14px; margin-bottom: 14px; }
+  .form-card h4 { margin: 0 0 10px; font-size: 15px; color: var(--bronze); }
+  .field { margin-bottom: 9px; }
+  .field label { display: block; font-size: 12px; color: #6b6156; margin-bottom: 3px; }
+  .field input, .field select, .field textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px; font-family: inherit; font-size: 13.5px; background: var(--ivory); color: var(--text-dark); }
+  .field textarea { resize: vertical; min-height: 50px; }
+  .perm-list { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background: var(--ivory); margin-bottom: 6px; }
+  .perm-row { display:flex; align-items:center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+  .perm-row:last-child { border-bottom:none; }
+  .perm-row input { width: auto; }
+  .form-actions { display: flex; gap: 8px; margin-top: 10px; }
+  .btn-primary { flex: 1; background: var(--black); color: var(--gold-light); border: none; border-radius: 8px; padding: 10px; font-weight: 600; font-family: inherit; font-size: 13.5px; }
+  .btn-secondary { background: none; border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; font-family: inherit; font-size: 13.5px; color: #6b6156; }
+  .form-error { color: var(--alert); font-size:12.5px; margin-top:6px; }
+
+  .nav { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 480px; background: var(--black); display: flex; border-top: 1px solid #2b2723; }
+  .nav button { flex: 1; background: none; border: none; color: #cbbfa0; padding: 10px 2px 8px; font-family: inherit; font-size: 10px; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+  .nav button .icon { font-size: 16px; }
+  .nav button.active { color: var(--gold-light); }
+  .loading { text-align: center; padding: 40px; color: #9a8f7f; font-size: 13px; }
+</style>
+</head>
+<body>
+
+<div id="loginScreen">
+  <div class="login-card">
+    <div class="brand">Prime Connect</div>
+    <div class="sub">نظام الموظفين والوظائف — تسجيل الدخول</div>
+    <div class="field"><label>اسم المستخدم</label><input id="loginUser" autocomplete="username" /></div>
+    <div class="field"><label>كلمة المرور</label><input id="loginPass" type="password" autocomplete="current-password" /></div>
+    <button id="loginBtn">دخول</button>
+    <div class="login-error" id="loginError"></div>
+  </div>
+</div>
+
+<div id="app" style="display:none">
+  <div class="header">
+    <div>
+      <div class="brand">Prime Connect</div>
+      <div class="sub">بنك الموظفين والوظائف</div>
+      <div class="tab-title" id="tabTitle">لوحة التحكم</div>
+    </div>
+    <div>
+      <div class="who" id="whoAmI"></div>
+      <button class="logout" id="logoutBtn">خروج</button>
+    </div>
+  </div>
+  <div class="content" id="content"><div class="loading">جاري التحميل...</div></div>
+  <button class="fab" id="fabBtn" style="display:none">+</button>
+  <div class="nav" id="navBar"></div>
+</div>
+
+<script>
+(function(){
+  var me = null;
+  var state = { positions: [], candidates: [], clients: [], placements: [], users: [] };
+  var currentTab = 'dashboard';
+  var formOpen = null;
+  var positionFilter = null;
+
+  var contentEl = document.getElementById('content');
+  var tabTitleEl = document.getElementById('tabTitle');
+  var fabBtn = document.getElementById('fabBtn');
+  var navBar = document.getElementById('navBar');
+  var titles = { dashboard:'لوحة التحكم', positions:'الوظائف', candidates:'المرشحين', clients:'العملاء', placements:'التوظيفات', users:'الحسابات والصلاحيات' };
+
+  var PERMISSION_LABELS = {
+    positionsManage: 'إدارة الوظائف (إضافة / تعديل / حذف)',
+    candidatesView: 'عرض والبحث في المرشحين',
+    candidatesAdd: 'إضافة مرشحين جدد',
+    candidatesManage: 'تعديل وحذف المرشحين',
+    clientsView: 'عرض قائمة العملاء',
+    clientsManage: 'إدارة العملاء (إضافة / تعديل / حذف)',
+    placementsView: 'عرض التوظيفات المسجلة',
+    placementsAdd: 'تسجيل توظيف جديد',
+    placementsManage: 'تعديل وحذف التوظيفات',
+    usersManage: 'إدارة حسابات الموظفين وصلاحياتهم'
+  };
+  var PERMISSION_KEYS = Object.keys(PERMISSION_LABELS);
+
+  var clientStatusLabels = { lead:'عميل محتمل', negotiating:'تفاوض', contract:'تعاقد', active:'نشط' };
+  var candidateStatusLabels = { new:'متاح', interview:'في مقابلة', submitted:'تم ترشيحه', hired:'تم توظيفه', rejected:'غير متاح' };
+  var placementStatusLabels = { pending:'معلق', confirmed:'مؤكد', paid:'تم الدفع' };
+  function statusLabel(map, val){ return map[val] || val; }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>]/g,function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[m];}); }
+  function escAttr(s){ return esc(s).replace(/"/g,'&quot;'); }
+  function can(key){ return !!(me && (me.isOwner || (me.permissions && me.permissions[key]))); }
+
+  async function api(method, url, body){
+    var res = await fetch(url, {
+      method: method,
+      headers: body ? {'Content-Type':'application/json'} : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+      credentials: 'same-origin'
+    });
+    var data = await res.json().catch(function(){ return {}; });
+    if (!res.ok) throw new Error(data.error || 'حدث خطأ');
+    return data;
+  }
+
+  // ---------- LOGIN ----------
+  document.getElementById('loginBtn').onclick = doLogin;
+  document.getElementById('loginPass').addEventListener('keydown', function(e){ if (e.key==='Enter') doLogin(); });
+  document.getElementById('loginUser').addEventListener('keydown', function(e){ if (e.key==='Enter') doLogin(); });
+
+  async function doLogin(){
+    var username = document.getElementById('loginUser').value.trim();
+    var password = document.getElementById('loginPass').value;
+    var errEl = document.getElementById('loginError');
+    errEl.textContent = '';
+    if (!username || !password) { errEl.textContent = 'من فضلك ادخل اسم المستخدم وكلمة المرور'; return; }
+    try {
+      me = await api('POST','/api/login',{username:username,password:password});
+      document.getElementById('loginScreen').style.display='none';
+      document.getElementById('app').style.display='block';
+      startApp();
+    } catch(e) { errEl.textContent = e.message; }
+  }
+  document.getElementById('logoutBtn').onclick = async function(){
+    await api('POST','/api/logout');
+    location.reload();
+  };
+
+  async function tryResume(){
+    try { me = await api('GET','/api/me'); document.getElementById('loginScreen').style.display='none'; document.getElementById('app').style.display='block'; startApp(); }
+    catch(e) { /* not logged in */ }
+  }
+
+  // ---------- NAV ----------
+  function navTabsForRole(){
+    var tabs = ['dashboard'];
+    if (can('positionsManage')) tabs.push('positions');
+    if (can('candidatesView')) tabs.push('candidates');
+    if (can('clientsView') || can('clientsManage')) tabs.push('clients');
+    if (can('placementsView')) tabs.push('placements');
+    if (can('usersManage')) tabs.push('users');
+    return tabs;
+  }
+  var navIcons = { dashboard:'📊', positions:'🗂️', candidates:'👤', clients:'🏢', placements:'🤝', users:'🔑' };
+
+  function buildNav(){
+    var tabs = navTabsForRole();
+    navBar.innerHTML = tabs.map(function(t,i){
+      return '<button data-tab="'+t+'" class="'+(i===0?'active':'')+'"><span class="icon">'+navIcons[t]+'</span>'+titles[t]+'</button>';
+    }).join('');
+    Array.prototype.forEach.call(navBar.querySelectorAll('button'), function(btn){
+      btn.addEventListener('click', function(){
+        Array.prototype.forEach.call(navBar.querySelectorAll('button'), function(b){ b.classList.remove('active'); });
+        btn.classList.add('active');
+        currentTab = btn.dataset.tab;
+        tabTitleEl.textContent = titles[currentTab];
+        formOpen = null;
+        if (currentTab !== 'candidates') positionFilter = null;
+        render();
+      });
+    });
+  }
+
+  function fabAllowedForTab(){
+    if (currentTab==='positions') return can('positionsManage');
+    if (currentTab==='candidates') return can('candidatesAdd');
+    if (currentTab==='clients') return can('clientsManage');
+    if (currentTab==='placements') return can('placementsAdd');
+    if (currentTab==='users') return can('usersManage');
+    return false;
+  }
+
+  fabBtn.addEventListener('click', function(){
+    if (currentTab==='positions') formOpen='position';
+    else if (currentTab==='candidates') formOpen='candidate';
+    else if (currentTab==='clients') formOpen='client';
+    else if (currentTab==='placements') formOpen='placement';
+    else if (currentTab==='users') formOpen='user';
+    render();
+  });
+
+  async function startApp(){
+    document.getElementById('whoAmI').textContent = me.name + ' (' + (me.isOwner?'الحساب الرئيسي':'موظف') + ')';
+    buildNav();
+    await loadAll();
+  }
+
+  async function loadAll(){
+    contentEl.innerHTML = '<div class="loading">جاري التحميل...</div>';
+    try {
+      var jobs = [];
+      jobs.push(can('positionsManage') || can('candidatesAdd') || can('candidatesView') ? api('GET','/api/positions') : Promise.resolve([]));
+      jobs.push(can('candidatesView') ? api('GET','/api/candidates') : Promise.resolve([]));
+      jobs.push(can('clientsView') || can('clientsManage') ? api('GET','/api/clients') : Promise.resolve([]));
+      jobs.push(can('placementsView') ? api('GET','/api/placements') : Promise.resolve([]));
+      var results = await Promise.all(jobs);
+      state.positions = results[0]; state.candidates = results[1]; state.clients = results[2]; state.placements = results[3];
+      if (can('usersManage')) state.users = await api('GET','/api/users');
+    } catch(e) { contentEl.innerHTML = '<div class="empty">تعذر تحميل البيانات: '+esc(e.message)+'</div>'; return; }
+    render();
+  }
+
+  function render(){
+    fabBtn.style.display = (currentTab!=='dashboard' && fabAllowedForTab()) ? 'flex' : 'none';
+    if (currentTab==='dashboard') return renderDashboard();
+    if (currentTab==='positions') return renderPositions();
+    if (currentTab==='candidates') return renderCandidates();
+    if (currentTab==='clients') return renderClients();
+    if (currentTab==='placements') return renderPlacements();
+    if (currentTab==='users') return renderUsers();
+  }
+
+  function candidatesInPosition(posId){ return state.candidates.filter(function(c){return c.positionId===posId;}); }
+
+  // ---------- DASHBOARD ----------
+  function renderDashboard(){
+    var totalCommission = state.placements.filter(function(p){return p.status==='confirmed'||p.status==='paid';}).reduce(function(s,p){return s+(Number(p.commission)||0);},0);
+    var posOptions = state.positions.map(function(p){return '<option value="'+p.id+'">'+esc(p.title)+' ('+candidatesInPosition(p.id).length+')</option>';}).join('');
+    var statCards = '<div class="stat-grid">';
+    if (can('positionsManage')) statCards += '<div class="stat-card"><div class="num">'+state.positions.length+'</div><div class="label">وظائف مفتوحة</div></div>';
+    if (can('clientsView') || can('clientsManage')) statCards += '<div class="stat-card"><div class="num">'+state.clients.length+'</div><div class="label">إجمالي العملاء</div></div>';
+    if (can('placementsView')) statCards += '<div class="stat-card"><div class="num">'+totalCommission.toLocaleString()+'</div><div class="label">عمولات (ج.م)</div></div>';
+    if (can('candidatesView')) statCards += '<div class="stat-card"><div class="num">'+state.candidates.length+'</div><div class="label">إجمالي المرشحين</div></div>';
+    statCards += '</div>';
+
+    var searchBox = '';
+    if (can('candidatesView')) {
+      searchBox = '<div class="search-box">' +
+        '<div class="lbl">🔍 العميل عايز وظيفة معينة؟ دور هنا</div>' +
+        '<select id="quickSearch"><option value="">اختر الوظيفة المطلوبة</option>'+posOptions+'</select>' +
+        '<button id="quickSearchBtn">اعرض المرشحين المتاحين</button>' +
+      '</div>';
+    }
+
+    contentEl.innerHTML = statCards + searchBox +
+      (can('positionsManage') ? '<div class="section-title">أحدث الوظائف المفتوحة</div>' +
+        (state.positions.slice(-3).reverse().map(function(p){return positionCardHtml(p);}).join('') || '<div class="empty">لا يوجد وظائف مضافة بعد</div>') : '');
+
+    var qsBtn = document.getElementById('quickSearchBtn');
+    if (qsBtn) qsBtn.onclick = function(){
+      var val = document.getElementById('quickSearch').value;
+      if (!val) return;
+      positionFilter = val;
+      currentTab = 'candidates';
+      Array.prototype.forEach.call(navBar.querySelectorAll('button'), function(b){ b.classList.remove('active'); });
+      var btn = navBar.querySelector('button[data-tab="candidates"]');
+      if (btn) btn.classList.add('active');
+      tabTitleEl.textContent = titles.candidates;
+      render();
+    };
+  }
+
+  function positionCardHtml(p, clickable){
+    var count = candidatesInPosition(p.id).length;
+    return '<div class="pos-card" '+(clickable?'onclick="PCApp.viewPosition(\''+p.id+'\')" style="cursor:pointer"':'')+'>' +
+      '<div><div class="ptitle">'+esc(p.title)+'</div><div class="pcat">'+esc(p.category||'')+'</div></div>' +
+      '<div class="pcount">'+count+'</div></div>';
+  }
+
+  // ---------- POSITIONS ----------
+  function renderPositions(){
+    var html = '';
+    if (formOpen==='position' || (typeof formOpen==='object' && formOpen && formOpen.type==='position')) html += positionForm(typeof formOpen==='object'?formOpen.data:null);
+    if (!state.positions.length) html += '<div class="empty">لا يوجد وظائف بعد. اضغط + لإضافة وظيفة جديدة</div>';
+    else html += state.positions.map(function(p){
+      return positionCardHtml(p, true) +
+        '<div class="card-actions" style="margin-top:-6px;margin-bottom:12px">' +
+          '<button class="mini-btn" onclick="PCApp.editPosition(\''+p.id+'\')">تعديل</button>' +
+          '<button class="mini-btn danger" onclick="PCApp.deletePosition(\''+p.id+'\')">حذف</button>' +
+        '</div>';
+    }).join('');
+    contentEl.innerHTML = html;
+    bindPositionForm();
+  }
+  function positionForm(data){
+    var d = data || {title:'',category:'',notes:''};
+    return '<div class="form-card"><h4>'+(data?'تعديل وظيفة':'وظيفة جديدة')+'</h4>' +
+      '<div class="field"><label>اسم الوظيفة</label><input id="f_title" value="'+escAttr(d.title)+'" /></div>' +
+      '<div class="field"><label>القطاع / الفئة</label><input id="f_category" value="'+escAttr(d.category)+'" /></div>' +
+      '<div class="field"><label>ملاحظات</label><textarea id="f_notes">'+esc(d.notes||'')+'</textarea></div>' +
+      '<div class="form-error" id="f_err"></div>' +
+      '<div class="form-actions"><button class="btn-primary" id="f_save">'+(data?'حفظ التعديل':'إضافة الوظيفة')+'</button><button class="btn-secondary" id="f_cancel">إلغاء</button></div></div>';
+  }
+  function bindPositionForm(){
+    var saveBtn = document.getElementById('f_save');
+    if (!saveBtn) return;
+    document.getElementById('f_cancel').onclick = function(){ formOpen=null; render(); };
+    saveBtn.onclick = async function(){
+      var title = document.getElementById('f_title').value.trim();
+      if (!title) return;
+      var obj = { title:title, category:document.getElementById('f_category').value.trim(), notes:document.getElementById('f_notes').value.trim() };
+      try {
+        if (typeof formOpen==='object' && formOpen.data) { await api('PUT','/api/positions/'+formOpen.data.id, obj); }
+        else { await api('POST','/api/positions', obj); }
+        formOpen=null; await loadAll();
+      } catch(e){ document.getElementById('f_err').textContent = e.message; }
+    };
+  }
+  window.PCApp = window.PCApp || {};
+  PCApp.editPosition = function(id){ formOpen = {type:'position', data: state.positions.find(function(x){return x.id===id;})}; render(); };
+  PCApp.deletePosition = async function(id){ await api('DELETE','/api/positions/'+id); await loadAll(); };
+  PCApp.viewPosition = function(id){
+    positionFilter = id; currentTab='candidates';
+    Array.prototype.forEach.call(navBar.querySelectorAll('button'), function(b){b.classList.remove('active');});
+    var btn = navBar.querySelector('button[data-tab="candidates"]'); if (btn) btn.classList.add('active');
+    tabTitleEl.textContent = titles.candidates;
+    render();
+  };
+
+  // ---------- CANDIDATES ----------
+  function renderCandidates(){
+    var html = '';
+    if (formOpen==='candidate' || (typeof formOpen==='object' && formOpen && formOpen.type==='candidate')) html += candidateForm(typeof formOpen==='object'?formOpen.data:null);
+    if (positionFilter) {
+      var pos = state.positions.find(function(p){return p.id===positionFilter;});
+      html += '<div class="filter-chip">📌 '+esc(pos?pos.title:'')+' <button onclick="PCApp.clearFilter()">✕</button></div>';
+    } else {
+      var posOptions = state.positions.map(function(p){return '<option value="'+p.id+'">'+esc(p.title)+'</option>';}).join('');
+      html += '<div class="field"><select id="posFilterSelect"><option value="">كل الوظائف</option>'+posOptions+'</select></div>';
+    }
+    var list = (positionFilter ? candidatesInPosition(positionFilter) : state.candidates).slice().reverse();
+    html += list.length ? list.map(function(c){return candidateCardHtml(c);}).join('') : '<div class="empty">'+(positionFilter?'لا يوجد مرشحين لهذه الوظيفة حتى الآن':'لا يوجد مرشحين بعد')+'</div>';
+    contentEl.innerHTML = html;
+    bindCandidateForm();
+    var sel = document.getElementById('posFilterSelect');
+    if (sel) sel.onchange = function(){ positionFilter = sel.value || null; render(); };
+  }
+  function candidateCardHtml(c){
+    var pos = state.positions.find(function(p){return p.id===c.positionId;});
+    var actions = can('candidatesManage') ? ('<div class="card-actions">' +
+        '<button class="mini-btn" onclick="PCApp.editCandidate(\''+c.id+'\')">تعديل</button>' +
+        '<button class="mini-btn danger" onclick="PCApp.deleteCandidate(\''+c.id+'\')">حذف</button></div>') : '';
+    return '<div class="card"><div class="row1"><div><div class="name">'+esc(c.name)+'</div>' +
+      '<div class="meta">' + (pos?'🗂️ '+esc(pos.title)+'<br>':'') + (c.phone?'📞 '+esc(c.phone)+'<br>':'') + (c.skills?'🛠 '+esc(c.skills):'') + '</div></div>' +
+      '<span class="badge '+c.status+'">'+statusLabel(candidateStatusLabels,c.status)+'</span></div>' + actions + '</div>';
+  }
+  function candidateForm(data){
+    var d = data || {name:'',phone:'',positionId:positionFilter||'',skills:'',status:'new',notes:''};
+    var posOptions = state.positions.map(function(p){return '<option value="'+p.id+'" '+(d.positionId===p.id?'selected':'')+'>'+esc(p.title)+'</option>';}).join('');
+    return '<div class="form-card"><h4>'+(data?'تعديل مرشح':'مرشح جديد')+'</h4>' +
+      '<div class="field"><label>الاسم</label><input id="f_name" value="'+escAttr(d.name)+'" /></div>' +
+      '<div class="field"><label>الهاتف</label><input id="f_phone" value="'+escAttr(d.phone)+'" /></div>' +
+      '<div class="field"><label>الوظيفة</label><select id="f_position"><option value="">بدون وظيفة محددة</option>'+posOptions+'</select></div>' +
+      '<div class="field"><label>المهارات / الخبرة</label><input id="f_skills" value="'+escAttr(d.skills)+'" /></div>' +
+      '<div class="field"><label>الحالة</label><select id="f_status">'+Object.entries(candidateStatusLabels).map(function(e){return '<option value="'+e[0]+'" '+(d.status===e[0]?'selected':'')+'>'+e[1]+'</option>';}).join('')+'</select></div>' +
+      '<div class="field"><label>ملاحظات</label><textarea id="f_notes">'+esc(d.notes||'')+'</textarea></div>' +
+      '<div class="form-error" id="f_err"></div>' +
+      '<div class="form-actions"><button class="btn-primary" id="f_save">'+(data?'حفظ التعديل':'إضافة المرشح')+'</button><button class="btn-secondary" id="f_cancel">إلغاء</button></div></div>';
+  }
+  function bindCandidateForm(){
+    var saveBtn = document.getElementById('f_save');
+    if (!saveBtn) return;
+    document.getElementById('f_cancel').onclick = function(){ formOpen=null; render(); };
+    saveBtn.onclick = async function(){
+      var name = document.getElementById('f_name').value.trim();
+      if (!name) return;
+      var obj = { name:name, phone:document.getElementById('f_phone').value.trim(), positionId:document.getElementById('f_position').value,
+        skills:document.getElementById('f_skills').value.trim(), status:document.getElementById('f_status').value, notes:document.getElementById('f_notes').value.trim() };
+      try {
+        if (typeof formOpen==='object' && formOpen.data) await api('PUT','/api/candidates/'+formOpen.data.id, obj);
+        else await api('POST','/api/candidates', obj);
+        formOpen=null; await loadAll();
+      } catch(e){ document.getElementById('f_err').textContent = e.message; }
+    };
+  }
+  PCApp.editCandidate = function(id){ formOpen = {type:'candidate', data: state.candidates.find(function(x){return x.id===id;})}; render(); };
+  PCApp.deleteCandidate = async function(id){ await api('DELETE','/api/candidates/'+id); await loadAll(); };
+  PCApp.clearFilter = function(){ positionFilter=null; render(); };
+
+  // ---------- CLIENTS ----------
+  function renderClients(){
+    var html = '';
+    if (formOpen==='client' || (typeof formOpen==='object' && formOpen && formOpen.type==='client')) html += clientForm(typeof formOpen==='object'?formOpen.data:null);
+    var list = state.clients.slice().reverse();
+    html += list.length ? list.map(function(c){
+      var actions = can('clientsManage') ? ('<div class="card-actions"><button class="mini-btn" onclick="PCApp.editClient(\''+c.id+'\')">تعديل</button>' +
+        '<button class="mini-btn danger" onclick="PCApp.deleteClient(\''+c.id+'\')">حذف</button></div>') : '';
+      return '<div class="card"><div class="row1"><div><div class="name">'+esc(c.name)+'</div>' +
+        '<div class="meta">'+(c.contact?'👤 '+esc(c.contact)+'<br>':'')+(c.phone?'📞 '+esc(c.phone):'')+'</div></div>' +
+        '<span class="badge '+c.status+'">'+statusLabel(clientStatusLabels,c.status)+'</span></div>' + actions + '</div>';
+    }).join('') : '<div class="empty">لا يوجد عملاء بعد</div>';
+    contentEl.innerHTML = html;
+    bindClientForm();
+  }
+  function clientForm(data){
+    var d = data || {name:'',contact:'',phone:'',status:'lead',notes:''};
+    return '<div class="form-card"><h4>'+(data?'تعديل عميل':'عميل جديد')+'</h4>' +
+      '<div class="field"><label>اسم الشركة</label><input id="f_name" value="'+escAttr(d.name)+'" /></div>' +
+      '<div class="field"><label>الشخص المسؤول</label><input id="f_contact" value="'+escAttr(d.contact)+'" /></div>' +
+      '<div class="field"><label>الهاتف / WeChat</label><input id="f_phone" value="'+escAttr(d.phone)+'" /></div>' +
+      '<div class="field"><label>الحالة</label><select id="f_status">'+Object.entries(clientStatusLabels).map(function(e){return '<option value="'+e[0]+'" '+(d.status===e[0]?'selected':'')+'>'+e[1]+'</option>';}).join('')+'</select></div>' +
+      '<div class="field"><label>ملاحظات</label><textarea id="f_notes">'+esc(d.notes||'')+'</textarea></div>' +
+      '<div class="form-error" id="f_err"></div>' +
+      '<div class="form-actions"><button class="btn-primary" id="f_save">'+(data?'حفظ التعديل':'إضافة العميل')+'</button><button class="btn-secondary" id="f_cancel">إلغاء</button></div></div>';
+  }
+  function bindClientForm(){
+    var saveBtn = document.getElementById('f_save');
+    if (!saveBtn) return;
+    document.getElementById('f_cancel').onclick = function(){ formOpen=null; render(); };
+    saveBtn.onclick = async function(){
+      var name = document.getElementById('f_name').value.trim();
+      if (!name) return;
+      var obj = { name:name, contact:document.getElementById('f_contact').value.trim(), phone:document.getElementById('f_phone').value.trim(), status:document.getElementById('f_status').value, notes:document.getElementById('f_notes').value.trim() };
+      try {
+        if (typeof formOpen==='object' && formOpen.data) await api('PUT','/api/clients/'+formOpen.data.id, obj);
+        else await api('POST','/api/clients', obj);
+        formOpen=null; await loadAll();
+      } catch(e){ document.getElementById('f_err').textContent = e.message; }
+    };
+  }
+  PCApp.editClient = function(id){ formOpen = {type:'client', data: state.clients.find(function(x){return x.id===id;})}; render(); };
+  PCApp.deleteClient = async function(id){ await api('DELETE','/api/clients/'+id); await loadAll(); };
+
+  // ---------- PLACEMENTS ----------
+  function renderPlacements(){
+    var html = '';
+    if (formOpen==='placement' || (typeof formOpen==='object' && formOpen && formOpen.type==='placement')) html += placementForm(typeof formOpen==='object'?formOpen.data:null);
+    var list = state.placements.slice().reverse();
+    html += list.length ? list.map(function(p){
+      var cand = state.candidates.find(function(x){return x.id===p.candidateId;});
+      var client = state.clients.find(function(x){return x.id===p.clientId;});
+      var pos = state.positions.find(function(x){return x.id===p.positionId;});
+      var actions = can('placementsManage') ? ('<div class="card-actions"><button class="mini-btn" onclick="PCApp.editPlacement(\''+p.id+'\')">تعديل</button>' +
+        '<button class="mini-btn danger" onclick="PCApp.deletePlacement(\''+p.id+'\')">حذف</button></div>') : '';
+      return '<div class="card"><div class="row1"><div><div class="name">'+esc(cand?cand.name:'مرشح محذوف')+' ← '+esc(client?client.name:'عميل محذوف')+'</div>' +
+        '<div class="meta">🗂️ '+esc(pos?pos.title:'')+'<br>💰 راتب: '+Number(p.salary).toLocaleString()+' — عمولة: '+Number(p.commission).toLocaleString()+' ج.م</div></div>' +
+        '<span class="badge '+p.status+'">'+statusLabel(placementStatusLabels,p.status)+'</span></div>' + actions + '</div>';
+    }).join('') : '<div class="empty">لا يوجد توظيفات بعد</div>';
+    contentEl.innerHTML = html;
+    bindPlacementForm();
+  }
+  function placementForm(data){
+    var d = data || {candidateId:'',clientId:'',positionId:'',salary:'',commission:'',status:'pending'};
+    var candOptions = state.candidates.map(function(c){return '<option value="'+c.id+'" '+(d.candidateId===c.id?'selected':'')+'>'+esc(c.name)+'</option>';}).join('');
+    var clientOptions = state.clients.map(function(c){return '<option value="'+c.id+'" '+(d.clientId===c.id?'selected':'')+'>'+esc(c.name)+'</option>';}).join('');
+    var posOptions = state.positions.map(function(p){return '<option value="'+p.id+'" '+(d.positionId===p.id?'selected':'')+'>'+esc(p.title)+'</option>';}).join('');
+    return '<div class="form-card"><h4>'+(data?'تعديل توظيف':'توظيف جديد')+'</h4>' +
+      '<div class="field"><label>المرشح</label><select id="f_cand"><option value="">اختر مرشح</option>'+candOptions+'</select></div>' +
+      '<div class="field"><label>العميل</label><select id="f_client"><option value="">اختر عميل</option>'+clientOptions+'</select></div>' +
+      '<div class="field"><label>الوظيفة</label><select id="f_pos"><option value="">اختر وظيفة</option>'+posOptions+'</select></div>' +
+      '<div class="field"><label>الراتب الشهري (ج.م)</label><input id="f_salary" type="number" value="'+escAttr(d.salary)+'" /></div>' +
+      '<div class="field"><label>العمولة (ج.م)</label><input id="f_commission" type="number" value="'+escAttr(d.commission)+'" /></div>' +
+      '<div class="field"><label>الحالة</label><select id="f_status">'+Object.entries(placementStatusLabels).map(function(e){return '<option value="'+e[0]+'" '+(d.status===e[0]?'selected':'')+'>'+e[1]+'</option>';}).join('')+'</select></div>' +
+      '<div class="form-error" id="f_err"></div>' +
+      '<div class="form-actions"><button class="btn-primary" id="f_save">'+(data?'حفظ التعديل':'إضافة التوظيف')+'</button><button class="btn-secondary" id="f_cancel">إلغاء</button></div></div>';
+  }
+  function bindPlacementForm(){
+    var saveBtn = document.getElementById('f_save');
+    if (!saveBtn) return;
+    document.getElementById('f_cancel').onclick = function(){ formOpen=null; render(); };
+    var salaryInput = document.getElementById('f_salary');
+    var commissionInput = document.getElementById('f_commission');
+    salaryInput.addEventListener('input', function(){ if (!commissionInput.dataset.touched) commissionInput.value = salaryInput.value; });
+    commissionInput.addEventListener('input', function(){ commissionInput.dataset.touched='1'; });
+    saveBtn.onclick = async function(){
+      var candidateId = document.getElementById('f_cand').value;
+      var clientId = document.getElementById('f_client').value;
+      if (!candidateId || !clientId) return;
+      var obj = { candidateId:candidateId, clientId:clientId, positionId:document.getElementById('f_pos').value,
+        salary:Number(salaryInput.value)||0, commission:Number(commissionInput.value)||0, status:document.getElementById('f_status').value };
+      try {
+        if (typeof formOpen==='object' && formOpen.data) await api('PUT','/api/placements/'+formOpen.data.id, obj);
+        else await api('POST','/api/placements', obj);
+        formOpen=null; await loadAll();
+      } catch(e){ document.getElementById('f_err').textContent = e.message; }
+    };
+  }
+  PCApp.editPlacement = function(id){ formOpen = {type:'placement', data: state.placements.find(function(x){return x.id===id;})}; render(); };
+  PCApp.deletePlacement = async function(id){ await api('DELETE','/api/placements/'+id); await loadAll(); };
+
+  // ---------- USERS & PERMISSIONS (owner / usersManage only) ----------
+  function permCheckboxesHtml(idPrefix, currentPerms){
+    return '<div class="perm-list">' + PERMISSION_KEYS.map(function(k){
+      var checked = currentPerms && currentPerms[k] ? 'checked' : '';
+      return '<label class="perm-row"><input type="checkbox" id="'+idPrefix+'_'+k+'" '+checked+' /> '+PERMISSION_LABELS[k]+'</label>';
+    }).join('') + '</div>';
+  }
+  function readPermCheckboxes(idPrefix){
+    var perms = {};
+    PERMISSION_KEYS.forEach(function(k){
+      var el = document.getElementById(idPrefix+'_'+k);
+      perms[k] = !!(el && el.checked);
+    });
+    return perms;
+  }
+
+  function renderUsers(){
+    var html = '';
+    if (formOpen==='user') html += userForm();
+    if (typeof formOpen==='object' && formOpen && formOpen.type==='editPerms') html += editPermsForm(formOpen.data);
+    html += state.users.map(function(u){
+      var actions = '';
+      if (!u.isOwner) {
+        actions = '<div class="card-actions">' +
+          '<button class="mini-btn" onclick="PCApp.editPerms(\''+u.id+'\')">الصلاحيات</button>' +
+          (u.id!==me.id ? '<button class="mini-btn danger" onclick="PCApp.deleteUser(\''+u.id+'\')">حذف</button>' : '') +
+        '</div>';
+      }
+      return '<div class="card"><div class="row1"><div><div class="name">'+esc(u.name)+'</div>' +
+        '<div class="meta">@'+esc(u.username)+'</div></div><span class="badge '+(u.isOwner?'owner':'staff')+'">'+(u.isOwner?'الحساب الرئيسي':'موظف')+'</span></div>' +
+        actions + '</div>';
+    }).join('');
+    contentEl.innerHTML = html;
+    bindUserForm();
+    bindEditPermsForm();
+  }
+  function userForm(){
+    return '<div class="form-card"><h4>حساب موظف جديد</h4>' +
+      '<div class="field"><label>الاسم</label><input id="f_name" /></div>' +
+      '<div class="field"><label>اسم المستخدم</label><input id="f_username" /></div>' +
+      '<div class="field"><label>كلمة المرور</label><input id="f_password" type="text" /></div>' +
+      '<div class="field"><label>الصلاحيات المسموح بها لهذا الحساب</label>' + permCheckboxesHtml('newperm', {candidatesView:true,candidatesAdd:true,placementsView:true,placementsAdd:true,clientsView:true}) + '</div>' +
+      '<div class="form-error" id="f_err"></div>' +
+      '<div class="form-actions"><button class="btn-primary" id="f_save">إنشاء الحساب</button><button class="btn-secondary" id="f_cancel">إلغاء</button></div></div>';
+  }
+  function bindUserForm(){
+    var saveBtn = document.getElementById('f_save');
+    if (!saveBtn || !document.getElementById('f_username')) return;
+    document.getElementById('f_cancel').onclick = function(){ formOpen=null; render(); };
+    saveBtn.onclick = async function(){
+      var username = document.getElementById('f_username').value.trim();
+      var password = document.getElementById('f_password').value;
+      var name = document.getElementById('f_name').value.trim();
+      if (!username || !password) return;
+      var perms = readPermCheckboxes('newperm');
+      try { await api('POST','/api/users', {username:username,password:password,name:name,permissions:perms}); formOpen=null; await loadAll(); }
+      catch(e){ document.getElementById('f_err').textContent = e.message; }
+    };
+  }
+  function editPermsForm(u){
+    return '<div class="form-card"><h4>صلاحيات: '+esc(u.name)+'</h4>' +
+      permCheckboxesHtml('editperm', u.permissions) +
+      '<div class="form-error" id="f_err2"></div>' +
+      '<div class="form-actions"><button class="btn-primary" id="f_save2">حفظ الصلاحيات</button><button class="btn-secondary" id="f_cancel2">إلغاء</button></div></div>';
+  }
+  function bindEditPermsForm(){
+    var saveBtn = document.getElementById('f_save2');
+    if (!saveBtn) return;
+    document.getElementById('f_cancel2').onclick = function(){ formOpen=null; render(); };
+    saveBtn.onclick = async function(){
+      var perms = readPermCheckboxes('editperm');
+      try { await api('PUT','/api/users/'+formOpen.data.id+'/permissions', {permissions:perms}); formOpen=null; await loadAll(); }
+      catch(e){ document.getElementById('f_err2').textContent = e.message; }
+    };
+  }
+  PCApp.editPerms = function(id){ formOpen = {type:'editPerms', data: state.users.find(function(x){return x.id===id;})}; render(); };
+  PCApp.deleteUser = async function(id){ await api('DELETE','/api/users/'+id); await loadAll(); };
+
+  tryResume();
+})();
+</script>
+</body>
+</html>
