@@ -140,6 +140,7 @@
     </div>
     <div>
       <div class="who" id="whoAmI"></div>
+      <button class="logout" id="pwBtn">كلمة المرور</button>
       <button class="logout" id="logoutBtn">خروج</button>
     </div>
   </div>
@@ -259,6 +260,7 @@
         currentTab = btn.dataset.tab;
         tabTitleEl.textContent = titles[currentTab];
         formOpen = null;
+        pwForm = null;
         clientDetailId = null;
         if (currentTab !== 'candidates') positionFilter = null;
         render();
@@ -313,7 +315,40 @@
     render();
   }
 
+  var pwForm = null; // {self:true} or {user:u}
   function render(){
+    renderTab();
+    if (pwForm) {
+      contentEl.insertAdjacentHTML('afterbegin', passwordFormHtml());
+      bindPasswordForm();
+    }
+  }
+  function passwordFormHtml(){
+    var title = pwForm.self ? 'تغيير كلمة المرور بتاعتك' : 'كلمة مرور جديدة لـ '+esc(pwForm.user.name);
+    return '<div class="form-card"><h4>'+title+'</h4>' +
+      (pwForm.self ? '<div class="field"><label>كلمة المرور الحالية</label><input id="pw_cur" type="password" autocomplete="current-password" /></div>' : '') +
+      '<div class="field"><label>كلمة المرور الجديدة (6 حروف على الأقل)</label><input id="pw_new" type="password" autocomplete="new-password" /></div>' +
+      '<div class="field"><label>اكتبها تاني</label><input id="pw_new2" type="password" autocomplete="new-password" /></div>' +
+      '<div class="form-error" id="pw_err"></div>' +
+      '<div class="form-actions"><button class="btn-primary" id="pw_save">حفظ</button><button class="btn-secondary" id="pw_cancel">إلغاء</button></div></div>';
+  }
+  function bindPasswordForm(){
+    document.getElementById('pw_cancel').onclick = function(){ pwForm = null; render(); };
+    document.getElementById('pw_save').onclick = async function(){
+      var err = document.getElementById('pw_err');
+      var nw = document.getElementById('pw_new').value, nw2 = document.getElementById('pw_new2').value;
+      if (nw.length < 6) { err.textContent = 'كلمة المرور لازم تكون 6 حروف على الأقل'; return; }
+      if (nw !== nw2) { err.textContent = 'كلمتين المرور مش زي بعض'; return; }
+      try {
+        if (pwForm.self) await api('PUT','/api/me/password',{ currentPassword: document.getElementById('pw_cur').value, newPassword: nw });
+        else await api('PUT','/api/users/'+pwForm.user.id+'/password',{ password: nw });
+        pwForm = null; render(); alert('اتغيرت كلمة المرور');
+      } catch(e){ err.textContent = e.message; }
+    };
+  }
+  document.getElementById('pwBtn').onclick = function(){ pwForm = { self: true }; render(); window.scrollTo(0,0); };
+
+  function renderTab(){
     fabBtn.style.display = (currentTab!=='dashboard' && fabAllowedForTab()) ? 'flex' : 'none';
     if (currentTab==='dashboard') return renderDashboard();
     if (currentTab==='positions') return renderPositions();
@@ -423,7 +458,7 @@
   }
   window.PCApp = window.PCApp || {};
   PCApp.editPosition = function(id){ formOpen = {type:'position', data: state.positions.find(function(x){return x.id===id;})}; render(); };
-  PCApp.deletePosition = async function(id){ await api('DELETE','/api/positions/'+id); await loadAll(); };
+  PCApp.deletePosition = async function(id){ if (!confirm('مسح الوظيفة دي؟')) return; try { await api('DELETE','/api/positions/'+id); await loadAll(); } catch(e){ alert(e.message); } };
   PCApp.viewPosition = function(id){
     positionFilter = id; currentTab='candidates';
     Array.prototype.forEach.call(navBar.querySelectorAll('button'), function(b){b.classList.remove('active');});
@@ -489,7 +524,7 @@
     };
   }
   PCApp.editCandidate = function(id){ formOpen = {type:'candidate', data: state.candidates.find(function(x){return x.id===id;})}; render(); };
-  PCApp.deleteCandidate = async function(id){ await api('DELETE','/api/candidates/'+id); await loadAll(); };
+  PCApp.deleteCandidate = async function(id){ if (!confirm('مسح المرشح ده؟ ترشيحاته للشركات هتتمسح كمان.')) return; try { await api('DELETE','/api/candidates/'+id); await loadAll(); } catch(e){ alert(e.message); } };
   PCApp.clearFilter = function(){ positionFilter=null; render(); };
 
   // ---------- CLIENTS ----------
@@ -540,7 +575,7 @@
     };
   }
   PCApp.editClient = function(id){ formOpen = {type:'client', data: state.clients.find(function(x){return x.id===id;})}; render(); };
-  PCApp.deleteClient = async function(id){ await api('DELETE','/api/clients/'+id); await loadAll(); };
+  PCApp.deleteClient = async function(id){ if (!confirm('مسح الشركة دي؟ طلباتها وترشيحاتها هتتمسح كمان.')) return; try { await api('DELETE','/api/clients/'+id); await loadAll(); } catch(e){ alert(e.message); } };
 
   // ---------- PLACEMENTS ----------
   function renderPlacements(){
@@ -597,7 +632,7 @@
     };
   }
   PCApp.editPlacement = function(id){ formOpen = {type:'placement', data: state.placements.find(function(x){return x.id===id;})}; render(); };
-  PCApp.deletePlacement = async function(id){ await api('DELETE','/api/placements/'+id); await loadAll(); };
+  PCApp.deletePlacement = async function(id){ if (!confirm('مسح التوظيف ده؟')) return; try { await api('DELETE','/api/placements/'+id); await loadAll(); } catch(e){ alert(e.message); } };
 
   // ---------- USERS & PERMISSIONS (owner / usersManage only) ----------
   function permCheckboxesHtml(idPrefix, currentPerms){
@@ -624,6 +659,7 @@
       if (!u.isOwner) {
         actions = '<div class="card-actions">' +
           '<button class="mini-btn" onclick="PCApp.editPerms(\''+u.id+'\')">الصلاحيات</button>' +
+          '<button class="mini-btn" onclick="PCApp.resetPassword(\''+u.id+'\')">كلمة المرور</button>' +
           (u.id!==me.id ? '<button class="mini-btn danger" onclick="PCApp.deleteUser(\''+u.id+'\')">حذف</button>' : '') +
         '</div>';
       }
@@ -675,7 +711,8 @@
     };
   }
   PCApp.editPerms = function(id){ formOpen = {type:'editPerms', data: state.users.find(function(x){return x.id===id;})}; render(); };
-  PCApp.deleteUser = async function(id){ await api('DELETE','/api/users/'+id); await loadAll(); };
+  PCApp.resetPassword = function(id){ pwForm = { user: state.users.find(function(x){return x.id===id;}) }; render(); window.scrollTo(0,0); };
+  PCApp.deleteUser = async function(id){ if (!confirm('مسح الحساب ده؟')) return; try { await api('DELETE','/api/users/'+id); await loadAll(); } catch(e){ alert(e.message); } };
 
   // ---------- CLIENT REQUESTS & SUBMISSIONS ----------
   function isAccepted(x){ return x.result==='accepted' || x.result==='started'; }
