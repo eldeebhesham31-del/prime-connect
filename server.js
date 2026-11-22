@@ -17,6 +17,11 @@ const PERMISSION_KEYS = [
   'placementsView',    // view placements
   'placementsAdd',     // register a new placement
   'placementsManage',  // edit / delete placements
+  'requestsView',      // view client hiring requests
+  'requestsManage',    // create / edit / delete client hiring requests
+  'submissionsView',   // view candidates submitted to client requests (interview / result / salary)
+  'submissionsAdd',    // submit a candidate to a client request
+  'submissionsManage', // edit / delete submissions (interview status, result, salary)
   'usersManage'        // create / delete staff accounts and set their permissions
 ];
 
@@ -32,7 +37,10 @@ function defaultStaffPermissions() {
     candidatesAdd: true,
     placementsView: true,
     placementsAdd: true,
-    clientsView: true
+    clientsView: true,
+    requestsView: true,
+    submissionsView: true,
+    submissionsAdd: true
   });
 }
 function fullPermissions() {
@@ -43,9 +51,12 @@ function fullPermissions() {
 
 function loadData() {
   if (!fs.existsSync(DATA_FILE)) {
-    return { users: [], positions: [], candidates: [], clients: [], placements: [] };
+    return { users: [], positions: [], candidates: [], clients: [], placements: [], requests: [], submissions: [] };
   }
-  return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+  const d = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+  // older data files predate these collections
+  ['users', 'positions', 'candidates', 'clients', 'placements', 'requests', 'submissions'].forEach(k => { if (!Array.isArray(d[k])) d[k] = []; });
+  return d;
 }
 function saveData() {
   fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
@@ -106,7 +117,8 @@ function requirePermission(key) {
   };
 }
 function publicUser(u) {
-  return { id: u.id, username: u.username, name: u.name, isOwner: !!u.isOwner, permissions: u.isOwner ? fullPermissions() : u.permissions };
+  const perms = u.isOwner ? fullPermissions() : Object.assign(emptyPermissions(), u.permissions || {});
+  return { id: u.id, username: u.username, name: u.name, isOwner: !!u.isOwner, permissions: perms };
 }
 
 // ---------- AUTH ----------
@@ -146,6 +158,7 @@ app.put('/api/users/:id/permissions', requireAuth, requirePermission('usersManag
   if (!u) return res.status(404).json({ error: 'غير موجود' });
   if (u.isOwner) return res.status(400).json({ error: 'لا يمكن تعديل صلاحيات الحساب الرئيسي' });
   const perms = req.body.permissions || {};
+  u.permissions = u.permissions || {};
   PERMISSION_KEYS.forEach(k => { u.permissions[k] = !!perms[k]; });
   saveData();
   res.json(publicUser(u));
@@ -202,6 +215,7 @@ app.put('/api/candidates/:id', requireAuth, requirePermission('candidatesManage'
 });
 app.delete('/api/candidates/:id', requireAuth, requirePermission('candidatesManage'), (req, res) => {
   data.candidates = data.candidates.filter(x => x.id !== req.params.id);
+  data.submissions = data.submissions.filter(x => x.candidateId !== req.params.id);
   saveData(); res.json({ ok: true });
 });
 
@@ -218,6 +232,8 @@ app.put('/api/clients/:id', requireAuth, requirePermission('clientsManage'), (re
 });
 app.delete('/api/clients/:id', requireAuth, requirePermission('clientsManage'), (req, res) => {
   data.clients = data.clients.filter(x => x.id !== req.params.id);
+  data.requests = data.requests.filter(x => x.clientId !== req.params.id);
+  data.submissions = data.submissions.filter(x => x.clientId !== req.params.id);
   saveData(); res.json({ ok: true });
 });
 
@@ -243,6 +259,87 @@ app.put('/api/placements/:id', requireAuth, requirePermission('placementsManage'
 });
 app.delete('/api/placements/:id', requireAuth, requirePermission('placementsManage'), (req, res) => {
   data.placements = data.placements.filter(x => x.id !== req.params.id);
+  saveData(); res.json({ ok: true });
+});
+
+// ---------- CLIENT HIRING REQUESTS (طلبات التوظيف) ----------
+const REQUEST_STATUSES = ['open', 'filled', 'paused'];
+const INTERVIEW_STATUSES = ['none', 'scheduled', 'done'];
+const RESULT_STATUSES = ['pending', 'accepted', 'rejected', 'started'];
+function pick(v, allowed, fallback) { return allowed.includes(v) ? v : fallback; }
+function str(v) { return v == null ? '' : String(v).trim(); }
+function num(v) { return v === '' || v == null || isNaN(Number(v)) ? '' : Number(v); }
+
+function cleanRequest(body, existing) {
+  const b = body || {}, e = existing || {};
+  const has = k => Object.prototype.hasOwnProperty.call(b, k);
+  return {
+    clientId: has('clientId') ? str(b.clientId) : (e.clientId || ''),
+    positionId: has('positionId') ? str(b.positionId) : (e.positionId || ''),
+    title: has('title') ? str(b.title) : (e.title || ''),
+    count: has('count') ? num(b.count) : (e.count ?? ''),
+    salaryRange: has('salaryRange') ? str(b.salaryRange) : (e.salaryRange || ''),
+    date: has('date') ? str(b.date) : (e.date || ''),
+    status: has('status') ? pick(b.status, REQUEST_STATUSES, 'open') : (e.status || 'open'),
+    notes: has('notes') ? str(b.notes) : (e.notes || '')
+  };
+}
+app.get('/api/requests', requireAuth, requirePermission('requestsView'), (req, res) => res.json(data.requests));
+app.post('/api/requests', requireAuth, requirePermission('requestsManage'), (req, res) => {
+  const r = Object.assign({ id: uid() }, cleanRequest(req.body), { createdAt: Date.now(), addedBy: currentUser(req).username });
+  if (!r.clientId || !data.clients.find(c => c.id === r.clientId)) return res.status(400).json({ error: 'اختر الشركة' });
+  if (!r.title) return res.status(400).json({ error: 'اكتب الوظيفة المطلوبة' });
+  data.requests.push(r); saveData(); res.json(r);
+});
+app.put('/api/requests/:id', requireAuth, requirePermission('requestsManage'), (req, res) => {
+  const r = data.requests.find(x => x.id === req.params.id);
+  if (!r) return res.status(404).json({ error: 'غير موجود' });
+  Object.assign(r, cleanRequest(req.body, r), { updatedAt: Date.now() });
+  // keep submissions pointing at the request's company
+  data.submissions.forEach(s => { if (s.requestId === r.id) s.clientId = r.clientId; });
+  saveData(); res.json(r);
+});
+app.delete('/api/requests/:id', requireAuth, requirePermission('requestsManage'), (req, res) => {
+  data.requests = data.requests.filter(x => x.id !== req.params.id);
+  data.submissions.forEach(s => { if (s.requestId === req.params.id) s.requestId = ''; });
+  saveData(); res.json({ ok: true });
+});
+
+// ---------- SUBMISSIONS (ترشيح مرشح لطلب شركة: انترفيو / نتيجة / مرتب) ----------
+function cleanSubmission(body, existing) {
+  const b = body || {}, e = existing || {};
+  const has = k => Object.prototype.hasOwnProperty.call(b, k);
+  const out = {
+    candidateId: has('candidateId') ? str(b.candidateId) : (e.candidateId || ''),
+    requestId: has('requestId') ? str(b.requestId) : (e.requestId || ''),
+    clientId: has('clientId') ? str(b.clientId) : (e.clientId || ''),
+    interview: has('interview') ? pick(b.interview, INTERVIEW_STATUSES, 'none') : (e.interview || 'none'),
+    interviewDate: has('interviewDate') ? str(b.interviewDate) : (e.interviewDate || ''),
+    result: has('result') ? pick(b.result, RESULT_STATUSES, 'pending') : (e.result || 'pending'),
+    salary: has('salary') ? num(b.salary) : (e.salary ?? ''),
+    notes: has('notes') ? str(b.notes) : (e.notes || '')
+  };
+  const r = out.requestId && data.requests.find(x => x.id === out.requestId);
+  if (r) out.clientId = r.clientId;
+  return out;
+}
+app.get('/api/submissions', requireAuth, requirePermission('submissionsView'), (req, res) => res.json(data.submissions));
+app.post('/api/submissions', requireAuth, requirePermission('submissionsAdd'), (req, res) => {
+  const s = Object.assign({ id: uid() }, cleanSubmission(req.body), { createdAt: Date.now(), addedBy: currentUser(req).username });
+  if (!s.candidateId || !data.candidates.find(c => c.id === s.candidateId)) return res.status(400).json({ error: 'اختر المرشح' });
+  if (!s.clientId || !data.clients.find(c => c.id === s.clientId)) return res.status(400).json({ error: 'اختر الشركة' });
+  if (s.requestId && data.submissions.find(x => x.requestId === s.requestId && x.candidateId === s.candidateId))
+    return res.status(400).json({ error: 'المرشح ده مترشح للطلب ده بالفعل' });
+  data.submissions.push(s); saveData(); res.json(s);
+});
+app.put('/api/submissions/:id', requireAuth, requirePermission('submissionsManage'), (req, res) => {
+  const s = data.submissions.find(x => x.id === req.params.id);
+  if (!s) return res.status(404).json({ error: 'غير موجود' });
+  Object.assign(s, cleanSubmission(req.body, s), { updatedAt: Date.now() });
+  saveData(); res.json(s);
+});
+app.delete('/api/submissions/:id', requireAuth, requirePermission('submissionsManage'), (req, res) => {
+  data.submissions = data.submissions.filter(x => x.id !== req.params.id);
   saveData(); res.json({ ok: true });
 });
 

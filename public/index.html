@@ -63,6 +63,23 @@
   .badge.pending { background: #eee0c0; color: var(--bronze); }
   .badge.confirmed { background: #dbe3ee; color: #2f4a6b; }
   .badge.paid { background: #d9e6de; color: var(--success); }
+  .badge.open { background: #d9e6de; color: var(--success); }
+  .badge.filled { background: #dbe3ee; color: #2f4a6b; }
+  .badge.paused { background: #eee0c0; color: var(--bronze); }
+  .badge.none { background: #eee; color: #6b6156; }
+  .badge.scheduled { background: #dbe3ee; color: #2f4a6b; }
+  .badge.done { background: #d9e6de; color: var(--success); }
+  .badge.accepted { background: #d9e6de; color: var(--success); }
+  .badge.started { background: var(--gold); color: var(--black); }
+  .sub-row { display:flex; justify-content:space-between; gap:8px; padding:8px 0; border-top:1px solid var(--line); font-size:13px; }
+  .sub-row:first-of-type { border-top:none; }
+  .sub-row .who2 { font-weight:600; }
+  .tiny { font-size:11.5px; color:#8a7f6f; }
+  .links a { color: var(--bronze); font-size:12px; margin-left:10px; text-decoration:none; font-weight:600; }
+  .progress { height:6px; background:var(--line); border-radius:4px; overflow:hidden; margin-top:6px; }
+  .progress i { display:block; height:100%; background:var(--success); }
+  .back-link { background:none; border:none; color:var(--bronze); font-family:inherit; font-size:13px; padding:0; margin-bottom:10px; cursor:pointer; }
+  .export-btn { width:100%; background:none; border:1px dashed var(--gold); color:var(--bronze); border-radius:8px; padding:9px; font-family:inherit; font-size:13px; margin:6px 0 14px; }
   .badge.owner { background: var(--gold); color:var(--black); }
   .badge.staff { background:#dbe3ee; color:#2f4a6b; }
 
@@ -131,10 +148,12 @@
   <div class="nav" id="navBar"></div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 (function(){
   var me = null;
-  var state = { positions: [], candidates: [], clients: [], placements: [], users: [] };
+  var state = { positions: [], candidates: [], clients: [], placements: [], users: [], requests: [], submissions: [] };
+  var clientDetailId = null;
   var currentTab = 'dashboard';
   var formOpen = null;
   var positionFilter = null;
@@ -143,7 +162,7 @@
   var tabTitleEl = document.getElementById('tabTitle');
   var fabBtn = document.getElementById('fabBtn');
   var navBar = document.getElementById('navBar');
-  var titles = { dashboard:'لوحة التحكم', positions:'الوظائف', candidates:'المرشحين', clients:'العملاء', placements:'التوظيفات', users:'الحسابات والصلاحيات' };
+  var titles = { dashboard:'لوحة التحكم', positions:'الوظائف', candidates:'المرشحين', clients:'العملاء', placements:'التوظيفات', users:'الحسابات والصلاحيات', requests:'طلبات الشركات', clientDetail:'ملف الشركة' };
 
   var PERMISSION_LABELS = {
     positionsManage: 'إدارة الوظائف (إضافة / تعديل / حذف)',
@@ -155,6 +174,11 @@
     placementsView: 'عرض التوظيفات المسجلة',
     placementsAdd: 'تسجيل توظيف جديد',
     placementsManage: 'تعديل وحذف التوظيفات',
+    requestsView: 'عرض طلبات التوظيف من الشركات',
+    requestsManage: 'إدارة طلبات التوظيف (إضافة / تعديل / حذف)',
+    submissionsView: 'عرض الترشيحات (الانترفيو / النتيجة / المرتب)',
+    submissionsAdd: 'ترشيح مرشح لطلب شركة',
+    submissionsManage: 'تعديل وحذف الترشيحات (تحديث الانترفيو والنتيجة والمرتب)',
     usersManage: 'إدارة حسابات الموظفين وصلاحياتهم'
   };
   var PERMISSION_KEYS = Object.keys(PERMISSION_LABELS);
@@ -162,6 +186,9 @@
   var clientStatusLabels = { lead:'عميل محتمل', negotiating:'تفاوض', contract:'تعاقد', active:'نشط' };
   var candidateStatusLabels = { new:'متاح', interview:'في مقابلة', submitted:'تم ترشيحه', hired:'تم توظيفه', rejected:'غير متاح' };
   var placementStatusLabels = { pending:'معلق', confirmed:'مؤكد', paid:'تم الدفع' };
+  var requestStatusLabels = { open:'مفتوح', filled:'مكتمل', paused:'متوقف' };
+  var interviewLabels = { none:'لم يتم', scheduled:'محدد ميعاد', done:'عمل انترفيو' };
+  var resultLabels = { pending:'في الانتظار', accepted:'اتقبل', rejected:'اترفض', started:'استلم الشغل' };
   function statusLabel(map, val){ return map[val] || val; }
   function esc(s){ return String(s==null?'':s).replace(/[&<>]/g,function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[m];}); }
   function escAttr(s){ return esc(s).replace(/"/g,'&quot;'); }
@@ -213,11 +240,12 @@
     if (can('positionsManage')) tabs.push('positions');
     if (can('candidatesView')) tabs.push('candidates');
     if (can('clientsView') || can('clientsManage')) tabs.push('clients');
+    if (can('requestsView')) tabs.push('requests');
     if (can('placementsView')) tabs.push('placements');
     if (can('usersManage')) tabs.push('users');
     return tabs;
   }
-  var navIcons = { dashboard:'📊', positions:'🗂️', candidates:'👤', clients:'🏢', placements:'🤝', users:'🔑' };
+  var navIcons = { dashboard:'📊', positions:'🗂️', candidates:'👤', clients:'🏢', requests:'📋', placements:'🤝', users:'🔑' };
 
   function buildNav(){
     var tabs = navTabsForRole();
@@ -231,6 +259,7 @@
         currentTab = btn.dataset.tab;
         tabTitleEl.textContent = titles[currentTab];
         formOpen = null;
+        clientDetailId = null;
         if (currentTab !== 'candidates') positionFilter = null;
         render();
       });
@@ -243,6 +272,8 @@
     if (currentTab==='clients') return can('clientsManage');
     if (currentTab==='placements') return can('placementsAdd');
     if (currentTab==='users') return can('usersManage');
+    if (currentTab==='requests') return can('requestsManage');
+    if (currentTab==='clientDetail') return can('requestsManage') || can('submissionsAdd');
     return false;
   }
 
@@ -252,6 +283,9 @@
     else if (currentTab==='clients') formOpen='client';
     else if (currentTab==='placements') formOpen='placement';
     else if (currentTab==='users') formOpen='user';
+    else if (currentTab==='requests') formOpen={type:'request', prefill:{}};
+    else if (currentTab==='clientDetail') formOpen = can('requestsManage') ? {type:'request', prefill:{clientId:clientDetailId}} : {type:'submission', prefill:{clientId:clientDetailId}};
+    window.scrollTo(0,0);
     render();
   });
 
@@ -269,8 +303,11 @@
       jobs.push(can('candidatesView') ? api('GET','/api/candidates') : Promise.resolve([]));
       jobs.push(can('clientsView') || can('clientsManage') ? api('GET','/api/clients') : Promise.resolve([]));
       jobs.push(can('placementsView') ? api('GET','/api/placements') : Promise.resolve([]));
+      jobs.push(can('requestsView') ? api('GET','/api/requests') : Promise.resolve([]));
+      jobs.push(can('submissionsView') ? api('GET','/api/submissions') : Promise.resolve([]));
       var results = await Promise.all(jobs);
       state.positions = results[0]; state.candidates = results[1]; state.clients = results[2]; state.placements = results[3];
+      state.requests = results[4]; state.submissions = results[5];
       if (can('usersManage')) state.users = await api('GET','/api/users');
     } catch(e) { contentEl.innerHTML = '<div class="empty">تعذر تحميل البيانات: '+esc(e.message)+'</div>'; return; }
     render();
@@ -284,6 +321,8 @@
     if (currentTab==='clients') return renderClients();
     if (currentTab==='placements') return renderPlacements();
     if (currentTab==='users') return renderUsers();
+    if (currentTab==='requests') return renderRequests();
+    if (currentTab==='clientDetail') return renderClientDetail();
   }
 
   function candidatesInPosition(posId){ return state.candidates.filter(function(c){return c.positionId===posId;}); }
@@ -297,6 +336,15 @@
     if (can('clientsView') || can('clientsManage')) statCards += '<div class="stat-card"><div class="num">'+state.clients.length+'</div><div class="label">إجمالي العملاء</div></div>';
     if (can('placementsView')) statCards += '<div class="stat-card"><div class="num">'+totalCommission.toLocaleString()+'</div><div class="label">عمولات (ج.م)</div></div>';
     if (can('candidatesView')) statCards += '<div class="stat-card"><div class="num">'+state.candidates.length+'</div><div class="label">إجمالي المرشحين</div></div>';
+    if (can('requestsView')) {
+      var openReqs = state.requests.filter(function(r){return r.status==='open';});
+      var needed = openReqs.reduce(function(a,r){return a+(Number(r.count)||0);},0);
+      statCards += '<div class="stat-card"><div class="num">'+openReqs.length+'</div><div class="label">طلبات مفتوحة ('+needed+' مطلوب)</div></div>';
+    }
+    if (can('submissionsView')) {
+      statCards += '<div class="stat-card"><div class="num">'+state.submissions.filter(function(x){return x.interview==='done';}).length+'</div><div class="label">عملوا انترفيو</div></div>';
+      statCards += '<div class="stat-card"><div class="num">'+state.submissions.filter(isAccepted).length+'</div><div class="label">اتقبلوا</div></div>';
+    }
     statCards += '</div>';
 
     var searchBox = '';
@@ -310,7 +358,8 @@
 
     contentEl.innerHTML = statCards + searchBox +
       (can('positionsManage') ? '<div class="section-title">أحدث الوظائف المفتوحة</div>' +
-        (state.positions.slice(-3).reverse().map(function(p){return positionCardHtml(p);}).join('') || '<div class="empty">لا يوجد وظائف مضافة بعد</div>') : '');
+        (state.positions.slice(-3).reverse().map(function(p){return positionCardHtml(p);}).join('') || '<div class="empty">لا يوجد وظائف مضافة بعد</div>') : '') +
+      upcomingInterviewsHtml();
 
     var qsBtn = document.getElementById('quickSearchBtn');
     if (qsBtn) qsBtn.onclick = function(){
@@ -451,8 +500,14 @@
     html += list.length ? list.map(function(c){
       var actions = can('clientsManage') ? ('<div class="card-actions"><button class="mini-btn" onclick="PCApp.editClient(\''+c.id+'\')">تعديل</button>' +
         '<button class="mini-btn danger" onclick="PCApp.deleteClient(\''+c.id+'\')">حذف</button></div>') : '';
-      return '<div class="card"><div class="row1"><div><div class="name">'+esc(c.name)+'</div>' +
-        '<div class="meta">'+(c.contact?'👤 '+esc(c.contact)+'<br>':'')+(c.phone?'📞 '+esc(c.phone):'')+'</div></div>' +
+      var open = (can('requestsView') || can('submissionsView')) ? ' onclick="PCApp.viewClient(\''+c.id+'\')" style="cursor:pointer"' : '';
+      var extra = '';
+      if (can('requestsView') || can('submissionsView')) {
+        var st = clientStats(c.id);
+        extra = '<br>📋 '+st.open+' طلب مفتوح — 👥 '+st.subs+' مرشح — ✅ '+st.accepted+' اتقبل';
+      }
+      return '<div class="card"><div class="row1"'+open+'><div><div class="name">'+esc(c.name)+'</div>' +
+        '<div class="meta">'+(c.contact?'👤 '+esc(c.contact)+'<br>':'')+(c.phone?'📞 '+esc(c.phone):'')+extra+'</div></div>' +
         '<span class="badge '+c.status+'">'+statusLabel(clientStatusLabels,c.status)+'</span></div>' + actions + '</div>';
     }).join('') : '<div class="empty">لا يوجد عملاء بعد</div>';
     contentEl.innerHTML = html;
@@ -490,7 +545,7 @@
   // ---------- PLACEMENTS ----------
   function renderPlacements(){
     var html = '';
-    if (formOpen==='placement' || (typeof formOpen==='object' && formOpen && formOpen.type==='placement')) html += placementForm(typeof formOpen==='object'?formOpen.data:null);
+    if (formOpen==='placement' || (typeof formOpen==='object' && formOpen && formOpen.type==='placement')) html += placementForm(typeof formOpen==='object'?(formOpen.data||null):null, typeof formOpen==='object'?formOpen.prefill:null);
     var list = state.placements.slice().reverse();
     html += list.length ? list.map(function(p){
       var cand = state.candidates.find(function(x){return x.id===p.candidateId;});
@@ -505,8 +560,8 @@
     contentEl.innerHTML = html;
     bindPlacementForm();
   }
-  function placementForm(data){
-    var d = data || {candidateId:'',clientId:'',positionId:'',salary:'',commission:'',status:'pending'};
+  function placementForm(data, prefill){
+    var d = data || Object.assign({candidateId:'',clientId:'',positionId:'',salary:'',commission:'',status:'pending'}, prefill||{});
     var candOptions = state.candidates.map(function(c){return '<option value="'+c.id+'" '+(d.candidateId===c.id?'selected':'')+'>'+esc(c.name)+'</option>';}).join('');
     var clientOptions = state.clients.map(function(c){return '<option value="'+c.id+'" '+(d.clientId===c.id?'selected':'')+'>'+esc(c.name)+'</option>';}).join('');
     var posOptions = state.positions.map(function(p){return '<option value="'+p.id+'" '+(d.positionId===p.id?'selected':'')+'>'+esc(p.title)+'</option>';}).join('');
@@ -621,6 +676,297 @@
   }
   PCApp.editPerms = function(id){ formOpen = {type:'editPerms', data: state.users.find(function(x){return x.id===id;})}; render(); };
   PCApp.deleteUser = async function(id){ await api('DELETE','/api/users/'+id); await loadAll(); };
+
+  // ---------- CLIENT REQUESTS & SUBMISSIONS ----------
+  function isAccepted(x){ return x.result==='accepted' || x.result==='started'; }
+  function byId(list, id){ return list.find(function(x){return x.id===id;}); }
+  function clientName(id){ var c = byId(state.clients, id); return c ? c.name : 'شركة محذوفة'; }
+  function candName(id){ var c = byId(state.candidates, id); return c ? c.name : 'مرشح محذوف'; }
+  function fmtDate(d){ if (!d) return ''; var p = String(d).split('-'); return p.length===3 ? p[2]+'/'+p[1]+'/'+p[0] : esc(d); }
+  function today(){ var d = new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+  function money(n){ return (n===''||n==null||isNaN(n)) ? '' : Number(n).toLocaleString()+' ج.م'; }
+  function opts(map, val){ return Object.entries(map).map(function(e){return '<option value="'+e[0]+'" '+(val===e[0]?'selected':'')+'>'+e[1]+'</option>';}).join(''); }
+  function badgeHtml(map, val){ return val ? '<span class="badge '+escAttr(val)+'">'+esc(statusLabel(map,val))+'</span>' : ''; }
+  function phoneLinks(p){
+    if (!p) return '';
+    var digits = String(p).replace(/\D/g,'');
+    if (!digits) return '📞 '+esc(p);
+    var intl = digits.charAt(0)==='0' ? '20'+digits.slice(1) : digits;
+    return '📞 '+esc(p)+' <span class="links"><a href="tel:'+digits+'">اتصال</a><a href="https://wa.me/'+intl+'" target="_blank" rel="noopener">واتساب</a></span>';
+  }
+  function clientStats(cid){
+    var reqs = state.requests.filter(function(r){return r.clientId===cid;});
+    var subs = state.submissions.filter(function(s){return s.clientId===cid;});
+    return {
+      open: reqs.filter(function(r){return r.status==='open';}).length,
+      needed: reqs.filter(function(r){return r.status==='open';}).reduce(function(a,r){return a+(Number(r.count)||0);},0),
+      subs: subs.length,
+      interviewed: subs.filter(function(s){return s.interview==='done';}).length,
+      accepted: subs.filter(isAccepted).length,
+      rejected: subs.filter(function(s){return s.result==='rejected';}).length
+    };
+  }
+  function goTab(tab){
+    currentTab = tab;
+    Array.prototype.forEach.call(navBar.querySelectorAll('button'), function(b){ b.classList.toggle('active', b.dataset.tab===tab || (tab==='clientDetail' && b.dataset.tab==='clients')); });
+    tabTitleEl.textContent = titles[tab];
+    render(); window.scrollTo(0,0);
+  }
+
+  function upcomingInterviewsHtml(){
+    if (!can('submissionsView')) return '';
+    var t = today();
+    var up = state.submissions.filter(function(s){return s.interview==='scheduled' && s.interviewDate && s.interviewDate>=t;})
+      .sort(function(a,b){return a.interviewDate.localeCompare(b.interviewDate);}).slice(0,6);
+    return '<div class="section-title">انترفيوهات جاية</div>' + (up.length ? '<div class="card">' + up.map(function(s){
+      return '<div class="sub-row"><div><div class="who2">'+esc(candName(s.candidateId))+'</div><div class="tiny">'+esc(clientName(s.clientId))+'</div></div><div class="tiny">'+fmtDate(s.interviewDate)+'</div></div>';
+    }).join('') + '</div>' : '<div class="empty">مفيش انترفيوهات متحددة الأيام الجاية</div>');
+  }
+
+  function submissionRowHtml(s, showClient){
+    var cand = byId(state.candidates, s.candidateId) || {};
+    var req = byId(state.requests, s.requestId);
+    var actions = '';
+    if (can('submissionsManage')) actions += '<button class="mini-btn" onclick="PCApp.editSubmission(\''+s.id+'\')">تحديث</button>';
+    if (isAccepted(s) && can('placementsAdd') && !state.placements.find(function(p){return p.candidateId===s.candidateId && p.clientId===s.clientId;}))
+      actions += '<button class="mini-btn" onclick="PCApp.submissionToPlacement(\''+s.id+'\')">سجّل كتوظيف</button>';
+    if (can('submissionsManage')) actions += '<button class="mini-btn danger" onclick="PCApp.deleteSubmission(\''+s.id+'\')">حذف</button>';
+    return '<div class="card"><div class="row1"><div><div class="name">'+esc(cand.name||'مرشح محذوف')+'</div>' +
+      '<div class="meta">' + (cand.phone ? phoneLinks(cand.phone)+'<br>' : '') +
+        (showClient ? '🏢 '+esc(clientName(s.clientId))+'<br>' : '') +
+        (req ? '📋 '+esc(req.title)+'<br>' : '') +
+        '🎙 الانترفيو: '+esc(statusLabel(interviewLabels, s.interview))+(s.interviewDate?' — '+fmtDate(s.interviewDate):'') +
+        (s.salary!=='' && s.salary!=null ? '<br>💰 المرتب: '+money(s.salary) : '') +
+        (s.notes ? '<br>📝 '+esc(s.notes) : '') +
+      '</div></div>' + badgeHtml(resultLabels, s.result) + '</div>' +
+      (actions ? '<div class="card-actions">'+actions+'</div>' : '') + '</div>';
+  }
+
+  function requestCardHtml(r, showClient){
+    var subs = state.submissions.filter(function(s){return s.requestId===r.id;});
+    var acc = subs.filter(isAccepted).length;
+    var count = Number(r.count)||0;
+    var pct = count ? Math.min(100, Math.round(acc/count*100)) : 0;
+    var actions = '';
+    if (can('submissionsAdd')) actions += '<button class="mini-btn" onclick="PCApp.newSubmission(\''+r.clientId+'\',\''+r.id+'\')">+ رشّح مرشح</button>';
+    if (can('requestsManage')) actions += '<button class="mini-btn" onclick="PCApp.editRequest(\''+r.id+'\')">تعديل</button><button class="mini-btn danger" onclick="PCApp.deleteRequest(\''+r.id+'\')">حذف</button>';
+    return '<div class="card"><div class="row1"><div><div class="name">'+esc(r.title)+'</div>' +
+      '<div class="meta">' + (showClient ? '🏢 <a href="#" onclick="PCApp.viewClient(\''+r.clientId+'\');return false" style="color:inherit">'+esc(clientName(r.clientId))+'</a><br>' : '') +
+        '👥 مطلوب: '+count+' — مترشح: '+subs.length+' — اتقبل: '+acc +
+        (r.salaryRange ? '<br>💰 '+esc(r.salaryRange) : '') + (r.date ? '<br>📅 '+fmtDate(r.date) : '') + (r.notes ? '<br>📝 '+esc(r.notes) : '') +
+      '</div></div>' + badgeHtml(requestStatusLabels, r.status) + '</div>' +
+      (count ? '<div class="progress"><i style="width:'+pct+'%"></i></div>' : '') +
+      (actions ? '<div class="card-actions">'+actions+'</div>' : '') + '</div>';
+  }
+
+  function renderForms(){
+    var html = '';
+    if (formOpen && typeof formOpen==='object' && formOpen.type==='request') html += requestForm(formOpen.data, formOpen.prefill);
+    if (formOpen && typeof formOpen==='object' && formOpen.type==='submission') html += submissionForm(formOpen.data, formOpen.prefill);
+    return html;
+  }
+  function bindForms(){ bindRequestForm(); bindSubmissionForm(); }
+
+  function renderRequests(){
+    var html = renderForms();
+    if (window.XLSX && state.clients.length) html += '<button class="export-btn" onclick="PCApp.exportExcel()">⬇️ تصدير Excel (شيت لكل شركة)</button>';
+    var order = { open:0, paused:1, filled:2 };
+    var list = state.requests.slice().sort(function(a,b){ return (order[a.status]||0)-(order[b.status]||0) || (b.createdAt||0)-(a.createdAt||0); });
+    html += list.length ? list.map(function(r){return requestCardHtml(r, true);}).join('') : '<div class="empty">لا يوجد طلبات توظيف بعد. اضغط + لإضافة طلب من شركة</div>';
+    contentEl.innerHTML = html;
+    bindForms();
+  }
+
+  function renderClientDetail(){
+    var c = byId(state.clients, clientDetailId);
+    if (!c) { clientDetailId = null; return goTab('clients'); }
+    var st = clientStats(c.id);
+    var html = '<button class="back-link" onclick="PCApp.backToClients()">→ رجوع للعملاء</button>' + renderForms() +
+      '<div class="card"><div class="row1"><div><div class="name" style="font-size:17px">'+esc(c.name)+'</div>' +
+      '<div class="meta">'+(c.contact?'👤 '+esc(c.contact)+'<br>':'')+(c.phone?phoneLinks(c.phone):'')+(c.notes?'<br>📝 '+esc(c.notes):'')+'</div></div>' +
+      badgeHtml(clientStatusLabels, c.status)+'</div></div>' +
+      '<div class="stat-grid">' +
+        '<div class="stat-card"><div class="num">'+st.needed+'</div><div class="label">مطلوب حاليًا</div></div>' +
+        '<div class="stat-card"><div class="num">'+st.subs+'</div><div class="label">مرشحين</div></div>' +
+        '<div class="stat-card"><div class="num">'+st.interviewed+'</div><div class="label">عملوا انترفيو</div></div>' +
+        '<div class="stat-card"><div class="num">'+st.accepted+'</div><div class="label">اتقبلوا</div></div>' +
+      '</div>';
+    if (window.XLSX) html += '<button class="export-btn" onclick="PCApp.exportExcel(\''+c.id+'\')">⬇️ تصدير شيت الشركة Excel</button>';
+    if (can('requestsView')) {
+      var reqs = state.requests.filter(function(r){return r.clientId===c.id;});
+      html += '<div class="section-title">طلبات التوظيف</div>' + (reqs.length ? reqs.map(function(r){return requestCardHtml(r, false);}).join('') : '<div class="empty">مفيش طلبات للشركة دي</div>');
+      if (can('requestsManage')) html += '<button class="export-btn" onclick="PCApp.newRequest(\''+c.id+'\')">+ طلب توظيف جديد للشركة</button>';
+    }
+    if (can('submissionsView')) {
+      var subs = state.submissions.filter(function(s){return s.clientId===c.id;}).sort(function(a,b){return (b.updatedAt||b.createdAt||0)-(a.updatedAt||a.createdAt||0);});
+      html += '<div class="section-title">المرشحين للشركة</div>' + (subs.length ? subs.map(function(s){return submissionRowHtml(s, false);}).join('') : '<div class="empty">لسه محدش اترشح للشركة دي</div>');
+      if (can('submissionsAdd')) html += '<button class="export-btn" onclick="PCApp.newSubmission(\''+c.id+'\',\'\')">+ رشّح مرشح للشركة</button>';
+    }
+    contentEl.innerHTML = html;
+    bindForms();
+  }
+
+  function clientOptionsHtml(sel){ return state.clients.map(function(c){return '<option value="'+c.id+'" '+(sel===c.id?'selected':'')+'>'+esc(c.name)+'</option>';}).join(''); }
+
+  function requestForm(data, prefill){
+    var d = data || Object.assign({clientId:'',positionId:'',title:'',count:'',salaryRange:'',date:today(),status:'open',notes:''}, prefill||{});
+    var posOptions = state.positions.map(function(p){return '<option value="'+p.id+'" '+(d.positionId===p.id?'selected':'')+'>'+esc(p.title)+'</option>';}).join('');
+    return '<div class="form-card"><h4>'+(data?'تعديل طلب توظيف':'طلب توظيف جديد')+'</h4>' +
+      '<div class="field"><label>الشركة</label><select id="r_client"><option value="">اختر الشركة</option>'+clientOptionsHtml(d.clientId)+'</select></div>' +
+      (posOptions ? '<div class="field"><label>الوظيفة من القائمة (اختياري)</label><select id="r_pos"><option value="">—</option>'+posOptions+'</select></div>' : '') +
+      '<div class="field"><label>الوظيفة المطلوبة</label><input id="r_title" value="'+escAttr(d.title)+'" /></div>' +
+      '<div class="field"><label>العدد المطلوب</label><input id="r_count" type="number" min="0" value="'+escAttr(d.count)+'" /></div>' +
+      '<div class="field"><label>المرتب المعروض</label><input id="r_salary" placeholder="مثلاً 6000 - 8000" value="'+escAttr(d.salaryRange)+'" /></div>' +
+      '<div class="field"><label>تاريخ الطلب</label><input id="r_date" type="date" value="'+escAttr(d.date)+'" /></div>' +
+      '<div class="field"><label>الحالة</label><select id="r_status">'+opts(requestStatusLabels, d.status)+'</select></div>' +
+      '<div class="field"><label>المواصفات / ملاحظات</label><textarea id="r_notes">'+esc(d.notes||'')+'</textarea></div>' +
+      '<div class="form-error" id="r_err"></div>' +
+      '<div class="form-actions"><button class="btn-primary" id="r_save">'+(data?'حفظ التعديل':'إضافة الطلب')+'</button><button class="btn-secondary" id="r_cancel">إلغاء</button></div></div>';
+  }
+  function bindRequestForm(){
+    var saveBtn = document.getElementById('r_save');
+    if (!saveBtn) return;
+    document.getElementById('r_cancel').onclick = function(){ formOpen=null; render(); };
+    var posSel = document.getElementById('r_pos');
+    if (posSel) posSel.onchange = function(){ var p = byId(state.positions, posSel.value); var t = document.getElementById('r_title'); if (p && !t.value.trim()) t.value = p.title; };
+    saveBtn.onclick = async function(){
+      var obj = { clientId: document.getElementById('r_client').value, positionId: posSel ? posSel.value : '',
+        title: document.getElementById('r_title').value.trim(), count: document.getElementById('r_count').value,
+        salaryRange: document.getElementById('r_salary').value.trim(), date: document.getElementById('r_date').value,
+        status: document.getElementById('r_status').value, notes: document.getElementById('r_notes').value.trim() };
+      var err = document.getElementById('r_err');
+      if (!obj.clientId) { err.textContent = 'اختر الشركة'; return; }
+      if (!obj.title) { err.textContent = 'اكتب الوظيفة المطلوبة'; return; }
+      saveBtn.disabled = true;
+      try {
+        if (formOpen.data) await api('PUT','/api/requests/'+formOpen.data.id, obj);
+        else await api('POST','/api/requests', obj);
+        formOpen=null; await loadAll();
+      } catch(e){ saveBtn.disabled = false; err.textContent = e.message; }
+    };
+  }
+
+  function submissionForm(data, prefill){
+    var d = data || Object.assign({candidateId:'',requestId:'',clientId:'',interview:'none',interviewDate:'',result:'pending',salary:'',notes:''}, prefill||{});
+    var candField;
+    if (data) {
+      candField = '<div class="field"><label>المرشح</label><input value="'+escAttr(candName(d.candidateId))+'" disabled /></div>';
+    } else {
+      var candOptions = state.candidates.slice().sort(function(a,b){return String(a.name).localeCompare(String(b.name),'ar');})
+        .map(function(c){return '<option value="'+c.id+'">'+esc(c.name)+(c.phone?' — '+esc(c.phone):'')+'</option>';}).join('');
+      candField = '<div class="field"><label>المرشح</label><select id="s_cand">' +
+          (can('candidatesAdd') ? '<option value="__new">➕ مرشح جديد مش في البنك</option>' : '<option value="">اختر مرشح</option>') + candOptions + '</select></div>' +
+        (can('candidatesAdd') ? '<div id="s_newcand"><div class="field"><label>اسم المرشح الجديد</label><input id="s_newname" /></div>' +
+          '<div class="field"><label>رقم التواصل</label><input id="s_newphone" inputmode="tel" /></div></div>' : '');
+    }
+    return '<div class="form-card"><h4>'+(data?'تحديث الترشيح':'ترشيح مرشح لشركة')+'</h4>' + candField +
+      '<div class="field"><label>الشركة</label><select id="s_client" '+(data?'disabled':'')+'><option value="">اختر الشركة</option>'+clientOptionsHtml(d.clientId)+'</select></div>' +
+      '<div class="field"><label>طلب التوظيف</label><select id="s_req"></select></div>' +
+      '<div class="field"><label>عمل انترفيو مع الشركة؟</label><select id="s_interview">'+opts(interviewLabels, d.interview)+'</select></div>' +
+      '<div class="field"><label>تاريخ الانترفيو</label><input id="s_idate" type="date" value="'+escAttr(d.interviewDate)+'" /></div>' +
+      '<div class="field"><label>النتيجة</label><select id="s_result">'+opts(resultLabels, d.result)+'</select></div>' +
+      '<div class="field"><label>المرتب (لو اتقبل) ج.م</label><input id="s_salary" type="number" min="0" value="'+escAttr(d.salary)+'" /></div>' +
+      '<div class="field"><label>ملاحظات</label><textarea id="s_notes">'+esc(d.notes||'')+'</textarea></div>' +
+      '<div class="form-error" id="s_err"></div>' +
+      '<div class="form-actions"><button class="btn-primary" id="s_save">'+(data?'حفظ':'إضافة الترشيح')+'</button><button class="btn-secondary" id="s_cancel">إلغاء</button></div></div>';
+  }
+  function bindSubmissionForm(){
+    var saveBtn = document.getElementById('s_save');
+    if (!saveBtn) return;
+    var d = formOpen.data || formOpen.prefill || {};
+    document.getElementById('s_cancel').onclick = function(){ formOpen=null; render(); };
+    var clientSel = document.getElementById('s_client'), reqSel = document.getElementById('s_req');
+    function fillReqs(selected){
+      reqSel.innerHTML = '<option value="">بدون طلب محدد</option>' + state.requests.filter(function(r){return r.clientId===clientSel.value;})
+        .map(function(r){return '<option value="'+r.id+'" '+(selected===r.id?'selected':'')+'>'+esc(r.title)+' ('+esc(statusLabel(requestStatusLabels,r.status))+')</option>';}).join('');
+    }
+    fillReqs(d.requestId);
+    clientSel.onchange = function(){ fillReqs(''); };
+    var candSel = document.getElementById('s_cand'), newBox = document.getElementById('s_newcand');
+    if (candSel && newBox) { var t = function(){ newBox.style.display = candSel.value==='__new' ? 'block' : 'none'; }; candSel.onchange = t; t(); }
+    saveBtn.onclick = async function(){
+      var err = document.getElementById('s_err');
+      var obj = { requestId: reqSel.value, clientId: clientSel.value, interview: document.getElementById('s_interview').value,
+        interviewDate: document.getElementById('s_idate').value, result: document.getElementById('s_result').value,
+        salary: document.getElementById('s_salary').value, notes: document.getElementById('s_notes').value.trim() };
+      if (!obj.clientId) { err.textContent = 'اختر الشركة'; return; }
+      saveBtn.disabled = true;
+      try {
+        if (formOpen.data) { await api('PUT','/api/submissions/'+formOpen.data.id, obj); }
+        else {
+          var candId = candSel ? candSel.value : '';
+          if (candId === '__new') {
+            var nm = document.getElementById('s_newname').value.trim();
+            if (!nm) { saveBtn.disabled = false; err.textContent = 'اكتب اسم المرشح'; return; }
+            var req = byId(state.requests, obj.requestId);
+            var created = await api('POST','/api/candidates', { name:nm, phone:document.getElementById('s_newphone').value.trim(),
+              positionId: req && req.positionId ? req.positionId : '', status: obj.interview==='none' ? 'submitted' : 'interview' });
+            candId = created.id;
+          }
+          if (!candId) { saveBtn.disabled = false; err.textContent = 'اختر المرشح'; return; }
+          obj.candidateId = candId;
+          await api('POST','/api/submissions', obj);
+        }
+        formOpen=null; await loadAll();
+      } catch(e){ saveBtn.disabled = false; err.textContent = e.message; }
+    };
+  }
+
+  // ---------- EXCEL EXPORT (one sheet per company) ----------
+  function sheetName(n, used){
+    var s = String(n||'شركة').replace(/[\[\]\:\*\?\/\\]/g,' ').slice(0,28).trim() || 'شركة', base = s, i = 2;
+    while (used[s]) { s = base.slice(0,25)+' '+(i++); }
+    used[s] = true; return s;
+  }
+  PCApp.exportExcel = function(onlyClientId){
+    if (!window.XLSX) { alert('مكتبة الإكسل مش متاحة دلوقتي'); return; }
+    var wb = XLSX.utils.book_new(); wb.Workbook = { Views: [{ RTL: true }] };
+    var used = {};
+    var clients = onlyClientId ? state.clients.filter(function(c){return c.id===onlyClientId;}) : state.clients;
+    if (!onlyClientId) {
+      var sum = [['الشركة','المسؤول','رقم التواصل','مطلوب حاليًا','مرشحين','عملوا انترفيو','اتقبلوا','اترفضوا']];
+      clients.forEach(function(c){ var st = clientStats(c.id); sum.push([c.name, c.contact||'', c.phone||'', st.needed, st.subs, st.interviewed, st.accepted, st.rejected]); });
+      var ws0 = XLSX.utils.aoa_to_sheet(sum); ws0['!cols'] = [{wch:24},{wch:16},{wch:16},{wch:12},{wch:9},{wch:13},{wch:9},{wch:9}];
+      XLSX.utils.book_append_sheet(wb, ws0, sheetName('ملخص الشركات', used));
+    }
+    clients.forEach(function(c){
+      var open = state.requests.filter(function(r){return r.clientId===c.id && r.status==='open';});
+      var rows = [['الشركة', c.name], ['طلبات مفتوحة', open.map(function(r){return r.title+' ('+(r.count||0)+')';}).join('، ')], [],
+        ['اسم المرشح','رقم التواصل','الوظيفة','عمل انترفيو؟','تاريخ الانترفيو','النتيجة','المرتب','ملاحظات']];
+      state.submissions.filter(function(s){return s.clientId===c.id;}).forEach(function(s){
+        var cand = byId(state.candidates, s.candidateId) || {}; var req = byId(state.requests, s.requestId);
+        rows.push([cand.name||'', cand.phone||'', req?req.title:'', statusLabel(interviewLabels,s.interview), fmtDate(s.interviewDate),
+          statusLabel(resultLabels,s.result), s.salary===''||s.salary==null?'':Number(s.salary), s.notes||'']);
+      });
+      var ws = XLSX.utils.aoa_to_sheet(rows);
+      ws['!cols'] = [{wch:22},{wch:15},{wch:16},{wch:13},{wch:14},{wch:13},{wch:11},{wch:30}];
+      for (var r=4; r<rows.length; r++){ var a = XLSX.utils.encode_cell({r:r,c:1}); if (ws[a]) ws[a].t='s'; }
+      XLSX.utils.book_append_sheet(wb, ws, sheetName(c.name, used));
+    });
+    XLSX.writeFile(wb, (onlyClientId ? clientName(onlyClientId) : 'طلبات الشركات') + ' ' + today() + '.xlsx');
+  };
+
+  PCApp.viewClient = function(id){ clientDetailId = id; formOpen = null; goTab('clientDetail'); };
+  PCApp.backToClients = function(){ clientDetailId = null; formOpen = null; goTab('clients'); };
+  PCApp.newRequest = function(clientId){ formOpen = {type:'request', prefill:{clientId:clientId}}; render(); window.scrollTo(0,0); };
+  PCApp.editRequest = function(id){ formOpen = {type:'request', data: byId(state.requests, id)}; render(); window.scrollTo(0,0); };
+  PCApp.deleteRequest = async function(id){
+    if (!confirm('مسح طلب التوظيف ده؟ المرشحين المترشحين ليه هيفضلوا في ملف الشركة.')) return;
+    try { await api('DELETE','/api/requests/'+id); await loadAll(); } catch(e){ alert(e.message); }
+  };
+  PCApp.newSubmission = function(clientId, requestId){ formOpen = {type:'submission', prefill:{clientId:clientId, requestId:requestId||''}}; render(); window.scrollTo(0,0); };
+  PCApp.editSubmission = function(id){ formOpen = {type:'submission', data: byId(state.submissions, id)}; render(); window.scrollTo(0,0); };
+  PCApp.deleteSubmission = async function(id){
+    if (!confirm('مسح الترشيح ده؟ المرشح هيفضل موجود في بنك المرشحين.')) return;
+    try { await api('DELETE','/api/submissions/'+id); await loadAll(); } catch(e){ alert(e.message); }
+  };
+  PCApp.submissionToPlacement = function(id){
+    var s = byId(state.submissions, id); if (!s) return;
+    var req = byId(state.requests, s.requestId);
+    clientDetailId = null;
+    formOpen = {type:'placement', prefill:{candidateId:s.candidateId, clientId:s.clientId, positionId: req && req.positionId ? req.positionId : '', salary: s.salary===''?'':s.salary, status:'pending'}};
+    goTab('placements');
+  };
 
   tryResume();
 })();
